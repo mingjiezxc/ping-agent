@@ -25,7 +25,7 @@ func JobCheck(newJob []PingJob) error {
 		for _, o := range JobData {
 			if n.Name == o.Name {
 				if n.SPEC == o.SPEC {
-					o.IP = n.IP
+					o.Group = n.Group
 					checkStatus = true
 					break
 				}
@@ -38,49 +38,52 @@ func JobCheck(newJob []PingJob) error {
 	return nil
 }
 
-func RequestJobData() (allData []PingJob, err error) {
-	i := 0
-	for {
-		val, err := rdb.SMembers(ctx, AgentName+"_job_list").Result()
+func GetAgentPingJobs() (allPingJob []PingJob, tmpGroupMap map[string][]string, err error) {
+	// get agent all job name
+	// data: ["xxx", "kkk", "ccc"]
+	jobs, err := rdb.SMembers(ctx, "agent-jobs_"+AgentName).Result()
+	if PrintErr(err) {
+		return
+	}
 
-		// err 5s request
-		if err != nil {
-			log.Println(err.Error())
-			time.Sleep(time.Duration(5) * time.Second)
-			i++
+	// get job config
+	for _, jobName := range jobs {
+
+		// get job data
+		// data: {SPEC:"* * * * *" , name:"xxxx", group:["xxx", "ccc"]}
+		job, err := rdb.Get(ctx, "agent_"+AgentName+"_"+jobName).Result()
+		if PrintErr(err) {
+			continue
+		}
+		var tmpPingJob PingJob
+		err = json.Unmarshal([]byte(job), &tmpPingJob)
+		if PrintErr(err) {
 			continue
 		}
 
-		if i > 10 {
-			err = errors.New("time out")
-			return allData, err
-		}
-
-		for _, v := range val {
-			pingJobJsonStr, _ := rdb.Get(ctx, v).Result()
-			var tmpData []PingJob
-			err = json.Unmarshal([]byte(pingJobJsonStr), &tmpData)
-			PrintErr(err)
-
-			for _, c := range tmpData {
-				for _, ip := range c.IP {
-					ipMap[ip] = &IPStatus{
-						IP:   ip,
-						PTLL: c.PTLL,
-					}
-
-				}
-
-			}
-
-			allData = append(allData, tmpData...)
-		}
+		allPingJob = append(allPingJob, tmpPingJob)
 
 	}
 
+	// get all ip group
+	groups, err := rdb.SMembers(ctx, "groups-list").Result()
+
+	tmpGroupMap = make(map[string][]string)
+
+	for _, groupName := range groups {
+		ips, err := rdb.SMembers(ctx, "group_"+groupName).Result()
+		if PrintErr(err) {
+			continue
+		}
+		tmpGroupMap[groupName] = ips
+
+	}
+
+	return
+
 }
 
-func StartPingConJob(endChan bool, v interface{}) {
+func StartPingConJob(v interface{}) {
 
 	c := cron.New(cron.WithSeconds())
 
@@ -97,9 +100,7 @@ func StartPingConJob(endChan bool, v interface{}) {
 	c.Start()
 	defer c.Stop()
 
-	if endChan {
-		<-pingConJobEndChan
-	}
+	<-pingConJobEndChan
 
 }
 
@@ -134,9 +135,19 @@ func sendPingMsg(addr string) {
 	}
 }
 
-func (g PingJob) Run() {
-	for _, ip := range g.IP {
-		sendPingMsg(ip)
-	}
+func StartErrListPingJob() {
+	c := cron.New(cron.WithSeconds())
+
+	c.AddFunc("* * * * * *", func() {
+		for _, ip := range errIP {
+			sendPingMsg(ip)
+			ipMap[ip].SendCount++
+		}
+	})
+
+	c.Start()
+	defer c.Stop()
+
+	select {}
 
 }

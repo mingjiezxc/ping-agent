@@ -3,29 +3,40 @@
 ## redis key
 
 ```bash
-agents
+agent-list, set
 
-$ageent_online
+
+agent-online_$ageent, key & timeout
 
 // ping is err list 表, 定时检查 ip 时间段内是否有丢包，如无则移出。
-$agent_err_ip_list, set
+agent-err-list_$agent, set
 ["xx", "xx",  "xx"]
 
 // cron job list 名称
-$agent_job_list, set 
-{SPEC:"* * * * *" , name:"xxxx"}
+agent-jobs_$agent,  set 
+val: ["xxx", "kkk", "ccc"]
 
-// cron job data
-$agent_$jobName, key
-{SPEC:"* * * * *" , IP:["xx","xx"]}
+// job status
+agent_$agent_$jobname, key
+{SPEC:"* * * * *" , name:"xxxx", group:["xxx", "ccc"]}
+
+
+// group list
+key: groups-list, set
+val: ["xxx","ccc","bbb"]
+
+// group 
+key: group_$groupName, set
+val: ["192.18.1.1", "192.168.2.1"]
+
+
+
+
 
 // ip 状态最新, agent 监听 timeout 事件，如发生将 ip ，添加至 err list
-$agent_$ip,  list set timeout
-[ ms, ms, ms ]
+key: ip_$agent_$ip,  key
+{send_count, return_count, ip, err}
 
-// agent 在线状态
-$agent_online, key set timeout
-"online"
 ```
 
 

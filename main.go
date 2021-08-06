@@ -12,7 +12,10 @@ import (
 var (
 	ListenAddr = "0.0.0.0"
 	AgentName  = ""
-	rdb        = redis.NewClient(&redis.Options{
+
+	// redis context
+	ctx = context.Background()
+	rdb = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379", // redis地址
 		Password: "",               // redis没密码，没有设置，则留空
 		DB:       0,                // 使用默认数据库
@@ -21,82 +24,91 @@ var (
 	// all con job manger chan
 	pingConJobEndChan = make(chan int, 1)
 
-	// redis context
-	ctx     = context.Background()
-	JobData []PingJob
-	ipMap   = make(map[string]*IPStatus)
-	errJob  = PingJob{SPEC: "* * * * * *"}
+	JobData  []PingJob
+	ipMap    = make(map[string]*IPStatus)
+	groupMap = make(map[string][]string)
+	errIP    []string
 )
 
 func main() {
 
 	go IcmpListenServer()
-	go StartPingConJob(false, &errJob)
 	go SubExpiredTLL()
 	go StartCronJobs()
+	go StartErrListPingJob()
 
 	for {
-		StartJob()
+		StartPingJobs()
 	}
 
 }
 
-func StartJob() {
+func StartPingJobs() {
 	// get data
-	JobData, err := RequestJobData()
+	JobData, groupData, err := GetAgentPingJobs()
+
+	groupMap = groupData
+
 	if err != nil {
 		log.Panicln(err.Error())
 		return
 	}
 
 	// start job
-	go StartPingConJob(true, &JobData)
+	go StartPingConJob(&JobData)
 
 	// check request data change
 	for {
-		tmpData, err := RequestJobData()
+		tmpJobData, tmpGroupData, err := GetAgentPingJobs()
 		if err != nil {
 			log.Println(err.Error())
+			continue
 		}
-		err = JobCheck(tmpData)
-
+		err = JobCheck(tmpJobData)
 		if err != nil {
 			pingConJobEndChan <- 0
 			return
 		}
+		groupMap = tmpGroupData
+
 		time.Sleep(time.Duration(60) * time.Second)
 
 	}
 
 }
 
-func AgentInit() {
-	_, err := rdb.SAdd(ctx, "agents", AgentName).Result()
-	PrintErr(err)
-
-	rdb.SetEX(ctx, AgentName+"_online", "ok", time.Duration(60)*time.Second)
-
-}
-
-func PrintErr(err error) {
+func PrintErr(err error) bool {
 	if err != nil {
 		log.Println(err.Error())
+		return true
 	}
+	return false
 }
 
 type PingJob struct {
 	SPEC    string
-	IP      []string
 	Name    string
+	Group   []string
 	EntryID cron.EntryID
 	PTLL    float64
 }
 
+func (g PingJob) Run() {
+	for _, groupName := range g.Group {
+		for _, ip := range groupMap[groupName] {
+			sendPingMsg(ip)
+		}
+
+	}
+
+}
+
 type IPStatus struct {
-	IP       string
-	PTLL     float64
-	Count    int64
-	ErrList  bool
-	Del      bool
-	LastTime time.Time
+	IP           string
+	PTLL         float64
+	SendCount    int64
+	ReceiveCount int64
+	ErrList      bool
+	Del          bool
+	LastTime     time.Time
 }

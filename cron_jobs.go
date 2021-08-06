@@ -1,8 +1,6 @@
 package main
 
 import (
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -11,58 +9,72 @@ import (
 func StartCronJobs() {
 	c := cron.New()
 
+	// check err ip list ,if restore remove
 	c.AddFunc("* * * * *", CheckErrIPRemove)
+
+	// check Meomory ip status add to err ip list
 	c.AddFunc("* * * * *", MemoryErrIPCheck)
+
+	// update redis agent status and regedit
 	c.AddFunc("* * * * *", AgentInit)
+
 	c.Start()
 	defer c.Stop()
-
 	select {}
 }
 
 func CheckErrIPRemove() {
 
 	// check err job ip list ,if restore remove ip on err list
-	for i := 0; i > len(errJob.IP); i++ {
+	for i := 0; i > len(errIP); i++ {
 		now := time.Now()
-		sub1 := now.Sub(ipMap[errJob.IP[i]].LastTime).Seconds()
-		if ipMap[errJob.IP[i]].Count > 3 && ipMap[errJob.IP[i]].PTLL > sub1 {
-			errJob.IP = append(errJob.IP[:i], errJob.IP[i+1:]...)
+		sub1 := now.Sub(ipMap[errIP[i]].LastTime).Seconds()
+		if (ipMap[errIP[i]].SendCount-ipMap[errIP[i]].ReceiveCount) < 10 && ipMap[errIP[i]].PTLL > sub1 {
+			errIP = append(errIP[:i], errIP[i+1:]...)
 		}
+	}
+
+	// clear ip count
+	for ip, _ := range ipMap {
+		ipMap[ip].ReceiveCount = 0
+		ipMap[ip].SendCount = 0
 	}
 
 }
 
 func MemoryErrIPCheck() {
 	// check ip status if now - LastTime > ptll,add to err job
-	for _, v := range JobData {
-		for _, ip := range v.IP {
+	for _, v := range groupMap {
+		for _, ip := range v {
 			now := time.Now()
 			sub1 := now.Sub(ipMap[ip].LastTime).Seconds()
 			if ipMap[ip].PTLL < sub1 {
-				errJob.IP = append(errJob.IP, ip)
+
+				// check ip on errIP list
+				if ArryInCheck(ip, errIP) {
+					continue
+				}
+
+				errIP = append(errIP, ip)
 			}
 		}
 	}
+
 }
 
-func SubExpiredTLL() {
-	pubsub := rdb.Subscribe(ctx, "__keyevent@0__:expired")
-	_, err := pubsub.Receive(ctx)
-	PrintErr(err)
-
-	// Go channel which receives messages.
-	ch := pubsub.Channel()
-
-	// Consume messages.
-	for msg := range ch {
-		payload := msg.Payload
-
-		match, _ := regexp.MatchString(AgentName+`_((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
-		if match {
-			s := strings.Split(payload, "_")
-			errJob.IP = append(errJob.IP, s[1])
+func ArryInCheck(val string, arry []string) bool {
+	for _, k := range arry {
+		if k == val {
+			return true
 		}
 	}
+	return false
+}
+
+func AgentInit() {
+	_, err := rdb.SAdd(ctx, "agent-list", AgentName).Result()
+	PrintErr(err)
+
+	rdb.SetEX(ctx, "agent-online_"+AgentName, "ok", time.Duration(120)*time.Second).Result()
 
 }
