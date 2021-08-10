@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -10,13 +11,16 @@ func StartCronJobs() {
 	c := cron.New()
 
 	// check err ip list ,if restore remove
-	c.AddFunc("* * * * *", CheckErrIPRemove)
+	c.AddFunc(config.ErrIPRemoveJobSpec, CheckErrIPRemove)
 
 	// check Meomory ip status add to err ip list
-	c.AddFunc("* * * * *", MemoryErrIPCheck)
+	c.AddFunc(config.MemoryIPStatusCheckSpec, MemoryErrIPCheck)
 
 	// update redis agent status and regedit
-	c.AddFunc("* * * * *", AgentInit)
+	c.AddFunc("* * * * *", AgentOnline)
+
+	// zabbix data send
+	c.AddFunc("*/2 * * * *", SendIpHostDirAndIPStatus)
 
 	c.Start()
 	defer c.Stop()
@@ -25,19 +29,15 @@ func StartCronJobs() {
 
 func CheckErrIPRemove() {
 
-	// check err job ip list ,if restore remove ip on err list
-	for i := 0; i > len(errIP); i++ {
-		now := time.Now()
-		sub1 := now.Sub(ipMap[errIP[i]].LastTime).Seconds()
-		if (ipMap[errIP[i]].SendCount-ipMap[errIP[i]].ReceiveCount) < 10 && ipMap[errIP[i]].PTLL > sub1 {
-			errIP = append(errIP[:i], errIP[i+1:]...)
-		}
-	}
+	ips, _ := rdb.SMembers(ctx, AgentName+"err_ip").Result()
 
-	// clear ip count
-	for ip, _ := range ipMap {
-		ipMap[ip].ReceiveCount = 0
-		ipMap[ip].SendCount = 0
+	// check err job ip list ,if restore remove ip on err list
+	for _, ip := range ips {
+		now := time.Now()
+		sub1 := now.Sub(ipMap[ip].UpdateTime).Seconds()
+		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) < 10 && ipMap[ip].PTLL > sub1 {
+			rdb.SRem(ctx, AgentName+"err_ip", ip).Result()
+		}
 	}
 
 }
@@ -47,15 +47,16 @@ func MemoryErrIPCheck() {
 	for _, v := range groupMap {
 		for _, ip := range v {
 			now := time.Now()
-			sub1 := now.Sub(ipMap[ip].LastTime).Seconds()
+			sub1 := now.Sub(ipMap[ip].UpdateTime).Seconds()
 			if ipMap[ip].PTLL < sub1 {
 
 				// check ip on errIP list
-				if ArryInCheck(ip, errIP) {
+				if err := rdb.SIsMember(ctx, AgentName+"err_ip", ip).Err(); err != nil {
 					continue
 				}
 
-				errIP = append(errIP, ip)
+				rdb.SAdd(ctx, AgentName+"err_ip", ip).Result()
+
 			}
 		}
 	}
@@ -71,10 +72,20 @@ func ArryInCheck(val string, arry []string) bool {
 	return false
 }
 
-func AgentInit() {
-	_, err := rdb.SAdd(ctx, "agent-list", AgentName).Result()
-	PrintErr(err)
+func AgentOnline() {
+	err := rdb.SAdd(ctx, "agent-list", AgentName).Err()
+	CheckPrintErr(err)
 
 	rdb.SetEX(ctx, "agent-online_"+AgentName, "ok", time.Duration(120)*time.Second).Result()
 
+}
+
+func UpdateAgnetAllIpStatus() {
+	data, err := json.Marshal(ipMap)
+	if CheckPrintErr(err) {
+		return
+	}
+
+	err = rdb.SAdd(ctx, AgentName+"_all-ip-status", data).Err()
+	CheckPrintErr(err)
 }

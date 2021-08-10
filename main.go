@@ -2,24 +2,24 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"log"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/robfig/cron/v3"
+	"gopkg.in/yaml.v2"
 )
 
 var (
-	ListenAddr = "0.0.0.0"
-	AgentName  = ""
+	config ConfigYaml
 
+	ListenAddr = "0.0.0.0"
+
+	// redis man name
+	AgentName string
 	// redis context
 	ctx = context.Background()
-	rdb = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // redis地址
-		Password: "",               // redis没密码，没有设置，则留空
-		DB:       0,                // 使用默认数据库
-	})
+	rdb *redis.Client
 
 	// all con job manger chan
 	pingConJobEndChan = make(chan int, 1)
@@ -27,8 +27,25 @@ var (
 	JobData  []PingJob
 	ipMap    = make(map[string]*IPStatus)
 	groupMap = make(map[string][]string)
-	errIP    []string
 )
+
+func init() {
+
+	AgentName = config.AgentName
+
+	configfile, err := ioutil.ReadFile("./config.yaml")
+	log.Panicln(err.Error())
+
+	err = yaml.Unmarshal(configfile, &config)
+	log.Panicln(err.Error())
+
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     config.RedisAddr,
+		Password: config.RedisPassword,
+		DB:       config.RedisDB,
+	})
+
+}
 
 func main() {
 
@@ -64,11 +81,15 @@ func StartPingJobs() {
 			log.Println(err.Error())
 			continue
 		}
-		err = JobCheck(tmpJobData)
-		if err != nil {
+
+		// job change restart StartPingConJob
+		if !JobCheck(tmpJobData) {
 			pingConJobEndChan <- 0
+
 			return
 		}
+
+		// job not change update ip group data
 		groupMap = tmpGroupData
 
 		time.Sleep(time.Duration(60) * time.Second)
@@ -77,7 +98,7 @@ func StartPingJobs() {
 
 }
 
-func PrintErr(err error) bool {
+func CheckPrintErr(err error) bool {
 	if err != nil {
 		log.Println(err.Error())
 		return true
@@ -86,11 +107,10 @@ func PrintErr(err error) bool {
 }
 
 type PingJob struct {
-	SPEC    string
-	Name    string
-	Group   []string
-	EntryID cron.EntryID
-	PTLL    float64
+	SPEC  string
+	Name  string
+	Group []string
+	PTLL  float64
 }
 
 func (g PingJob) Run() {
@@ -108,7 +128,20 @@ type IPStatus struct {
 	PTLL         float64
 	SendCount    int64
 	ReceiveCount int64
-	ErrList      bool
+	InErrList    bool
+	Ms           []int64
 	Del          bool
-	LastTime     time.Time
+	UpdateTime   time.Time
+}
+
+type ConfigYaml struct {
+	AgentName               string
+	RedisAddr               string
+	RedisPassword           string
+	RedisDB                 int
+	ErrIPRemoveJobSpec      string
+	MemoryIPStatusCheckSpec string
+	ZabbixTrapper           bool
+	ZabbixServer            string
+	zabbixPort              int
 }

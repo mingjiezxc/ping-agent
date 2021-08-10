@@ -1,0 +1,17 @@
+  // redis master key
+  AgentName  : ""
+
+  // redis server info
+  RedisAddr:     "localhost:6379"
+  RedisPassword: ""
+  RedisDB:       0
+
+  // job seting
+  ErrIPRemoveJobSpec: "* * * * *"
+  MemoryIPStatusCheckSpec: "* * * * *" 
+
+  // zabbix Trapper
+  ZabbixTrapper: false
+  ZabbixServer: ""
+  zabbixPort: ""
+

@@ -18,26 +18,30 @@ func IcmpListenServer() {
 	rb := make([]byte, 1500)
 	for {
 		n, sourceIP, err := c.ReadFrom(rb)
-		PrintErr(err)
+		CheckPrintErr(err)
 
 		rm, err := icmp.ParseMessage(58, rb[:n])
-		PrintErr(err)
+		CheckPrintErr(err)
 
 		body, _ := rm.Body.Marshal(58)
+
+		ip := sourceIP.String()
 
 		pingResult := time.Now().UnixNano() - BytesToInt64(body[4:])
 
 		// get key pttl
-		pttl := ipMap[sourceIP.String()].PTLL
+		pttl := ipMap[ip].PTLL
 
 		// ip count + 1
-		ipMap[sourceIP.String()].ReceiveCount++
+		ipMap[ip].ReceiveCount++
 
 		// ip info last time
-		ipMap[sourceIP.String()].LastTime = time.Now()
+		ipMap[ip].UpdateTime = time.Now()
 
 		// set key and var and set pttl
-		rdb.SetEX(ctx, AgentName+"_"+sourceIP.String(), pingResult, time.Duration(pttl)*time.Second)
+		rdb.SetEX(ctx, AgentName+"_"+ip, pingResult, time.Duration(pttl)*time.Second)
+
+		ipMap[ip].Ms = append(ipMap[ip].Ms, pingResult)
 
 	}
 
@@ -47,7 +51,7 @@ func SubExpiredTLL() {
 	// sub time out key
 	pubsub := rdb.Subscribe(ctx, "__keyevent@0__:expired")
 	_, err := pubsub.Receive(ctx)
-	PrintErr(err)
+	CheckPrintErr(err)
 
 	// Go channel which receives messages.
 	ch := pubsub.Channel()
@@ -59,10 +63,7 @@ func SubExpiredTLL() {
 		match, _ := regexp.MatchString(AgentName+`_((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
 		if match {
 			s := strings.Split(payload, "_")
-			errIP = append(errIP, s[1])
-			ipMap[s[1]].ReceiveCount = 0
-			ipMap[s[1]].SendCount = 0
-
+			rdb.SAdd(ctx, AgentName+"err_ip", s[1]).Result()
 		}
 	}
 
