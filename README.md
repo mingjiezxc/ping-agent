@@ -11,8 +11,8 @@
 -------------------------------------------------------------
 
    基础操作方式：
-1. 程序根据 cron job 中的 ip list 发送 icmp 包, 包中包含发送时的 unixnano
-2. 对端返回 icmp pack ，将包中的 unixnano 与 time.Now() 相减获得 ping值
+1. 程序根据 cron job 中的 ip list 发送 icmp 包, 包中包含发送时的 UnixNano
+2. 对端返回 icmp pack ，将包中的 UnixNano 与 time.Now() 相减获得 ping值
 3. 将 ping值 写入 redis ,并设置 timeout。
 4. 如 redis key timeout，agent 将该Ip加入 err list 
 5. cron job 定时检查 memory 中的 ip status，如无收到包 或 ping timeout，将IP 加入 err list
@@ -22,42 +22,54 @@
 
 ```bash
 // 所有 agent 列表，agent 自写入
-agent-list, set
+key: agent-list
+type: set
+value: [ "gza", "gzc" ]
 
 // agent 在线状态
-agent-online_$ageent, key & timeout
+key: agent-online_$ageent
+type: string & timeout
+value: online
 
 // ping is err list 表, 定时检查 ip 时间段内是否有丢包，如无则移出。
-agent-err-list_$agent, set
-["xx", "xx",  "xx"]
+key: agent-err-list_$agent
+type: set
+value: ["192.168.1.2", "192.168.1.1",  "192.168.2.1"]
 
 // cron job list 名称
-agent-jobs_$agent,  set 
-val: ["xxx", "kkk", "ccc"]
+key: agent-jobs_$agent
+type: set 
+value: ["xxx", "kkk", "ccc"]
 
 // job status
-agent_$agent_$jobname, key
-{SPEC:"* * * * *" , name:"xxxx", group:["group1", "ccc"]}
+key: agent_$agent_$jobname
+type: string
+value: {SPEC:"* * * * *" , name:"xxxx", group:["group1", "ccc"]}
 
 // ip group list
-key: groups-list, set
-val: ["group1","ccc","bbb"]
+key: groups-list
+type: set
+value: ["group1","ccc","bbb"]
 
 // ip group 
-key: group_$groupName, set
-val: ["192.18.1.1", "192.168.2.1"]
+key: group_$groupName
+type: set
+value: ["192.18.1.1", "192.168.2.1"]
 
 // ip 最新 ms 值 , agent 监听 timeout 事件，如发生将 ip ，添加至 err list
-key: $agent_$ip,  key
-ms
+key: $agent_$ip,  
+type: string
+value: 11
 
 // ip 状态 
-key: $agent_all-ip-status,  key
-{ip: {SendCount, ReturnCount, ip, InErrList} }
+key: $agent_all-ip-status
+type: string
+value: {ip: {SendCount, ReturnCount, ip, InErrList} }
 
 // agent 的错误IP 列表
-key: $agent_err_ip, set
-val: ["192.16.111.1"]
+key: $agent_err_ip
+type: set
+value: ["192.16.111.1"]
 
 
 ```
