@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -10,17 +11,17 @@ import (
 func StartCronJobs() {
 	c := cron.New()
 
+	// update redis agent status and regedit
+	c.AddFunc("* * * * *", AgentOnline)
+
 	// check err ip list ,if restore remove
 	c.AddFunc(config.ErrIPRemoveJobSpec, CheckErrIPRemove)
 
 	// check Meomory ip status add to err ip list
 	c.AddFunc(config.MemoryIPStatusCheckSpec, MemoryErrIPCheck)
 
-	// update redis agent status and regedit
-	c.AddFunc("* * * * *", AgentOnline)
-
 	// zabbix data send
-	c.AddFunc("*/2 * * * *", SendIpHostDirAndIPStatus)
+	c.AddFunc(config.ZabbixSendSPEC, SendIpHostDirAndIPStatus)
 
 	c.Start()
 	defer c.Stop()
@@ -33,11 +34,21 @@ func CheckErrIPRemove() {
 
 	// check err job ip list ,if restore remove ip on err list
 	for _, ip := range ips {
-		now := time.Now()
-		sub1 := now.Sub(ipMap[ip].UpdateTime).Seconds()
-		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) < 10 && ipMap[ip].PTLL > sub1 {
-			rdb.SRem(ctx, AgentName+"err_ip", ip).Result()
+		sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
+
+		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) < config.ErrIPRemoteListAllowedPacketLossData && ipMap[ip].PTLL > sub1 {
+			err := rdb.SRem(ctx, AgentName+"err_ip", ip).Err()
+			CheckPrintErr(err)
 		}
+
+		// clear count
+		ipMap[ip].MsAvg = Int64Avg(ipMap[ip].Ms)
+		ipMap[ip].Loss = fmt.Sprintf("%.2f", float64(ipMap[ip].ReceiveCount)/float64(ipMap[ip].SendCount))
+		ipMap[ip].Lost = ipMap[ip].SendCount - ipMap[ip].ReceiveCount
+		ipMap[ip].ReceiveCount = 0
+		ipMap[ip].SendCount = 0
+		ipMap[ip].Ms = []int64{}
+
 	}
 
 }
@@ -46,8 +57,8 @@ func MemoryErrIPCheck() {
 	// check ip status if now - LastTime > ptll,add to err job
 	for _, v := range groupMap {
 		for _, ip := range v {
-			now := time.Now()
-			sub1 := now.Sub(ipMap[ip].UpdateTime).Seconds()
+			sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
+
 			if ipMap[ip].PTLL < sub1 {
 
 				// check ip on errIP list
@@ -76,7 +87,8 @@ func AgentOnline() {
 	err := rdb.SAdd(ctx, "agent-list", AgentName).Err()
 	CheckPrintErr(err)
 
-	rdb.SetEX(ctx, "agent-online_"+AgentName, "ok", time.Duration(120)*time.Second).Result()
+	err = rdb.SetEX(ctx, "agent-online_"+AgentName, "ok", time.Duration(config.AgentNameOnlineTime)*time.Second).Err()
+	CheckPrintErr(err)
 
 }
 

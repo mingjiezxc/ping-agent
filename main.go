@@ -21,7 +21,7 @@ var (
 	ctx = context.Background()
 	rdb *redis.Client
 
-	// all con job manger chan
+	// all send icmp con job manger chan
 	pingConJobEndChan = make(chan int, 1)
 
 	JobData  []PingJob
@@ -33,6 +33,7 @@ func init() {
 
 	AgentName = config.AgentName
 
+	// read config file
 	configfile, err := ioutil.ReadFile("./config.yaml")
 	log.Panicln(err.Error())
 
@@ -107,10 +108,11 @@ func CheckPrintErr(err error) bool {
 }
 
 type PingJob struct {
-	SPEC  string
-	Name  string
-	Group []string
-	PTLL  float64
+	SPEC        string
+	Name        string
+	Group       []string
+	PTLL        float64
+	AllowedLoss int64
 }
 
 func (g PingJob) Run() {
@@ -125,23 +127,31 @@ func (g PingJob) Run() {
 
 type IPStatus struct {
 	IP           string
-	PTLL         float64
+	PTLL         int64
+	AllowedLoss  int64
 	SendCount    int64
 	ReceiveCount int64
 	InErrList    bool
 	Ms           []int64
+	MsAvg        int64
+	Loss         string
+	Lost         int64
 	Del          bool
-	UpdateTime   time.Time
+	UpdateTime   int64
 }
 
 type ConfigYaml struct {
-	AgentName               string
-	RedisAddr               string
-	RedisPassword           string
-	RedisDB                 int
-	ErrIPRemoveJobSpec      string
-	MemoryIPStatusCheckSpec string
-	ZabbixTrapper           bool
-	ZabbixServer            string
-	zabbixPort              int
+	AgentName                            string
+	AgentNameOnlineTime                  int
+	RedisAddr                            string
+	RedisPassword                        string
+	RedisDB                              int
+	ErrIPRemoveJobSpec                   string
+	MemoryIPStatusCheckSpec              string
+	ZabbixTrapper                        bool
+	ZabbixServer                         string
+	zabbixPort                           int
+	ZabbixSendSPEC                       string
+	ErrIPRemoteListAllowedPacketLossData int64
+	ErrIPICMPTimeOut                     int64
 }

@@ -2,6 +2,7 @@ package main
 
 import "fmt"
 
+// zabbix send host dir and ip status
 func SendIpHostDirAndIPStatus() {
 	var allIp []AgentIpDir
 
@@ -13,11 +14,10 @@ func SendIpHostDirAndIPStatus() {
 	metrics = append(metrics, NewMetric(AgentName, "ip.dir", fmt.Sprintf("%s", allIp)))
 
 	for ip, status := range ipMap {
-		metrics = append(metrics, NewMetric(ip, "ip.loss", fmt.Sprintf("%d", status.ReceiveCount/status.SendCount)))
-		metrics = append(metrics, NewMetric(ip, "ip.lost", fmt.Sprintf("%d", status.SendCount-status.ReceiveCount)))
-		metrics = append(metrics, NewMetric(ip, "ip.ms", fmt.Sprintf("%d", Int64Avg(status.Ms))))
-		ipMap[ip].ReceiveCount = 0
-		ipMap[ip].SendCount = 0
+		metrics = append(metrics, NewMetric(ip, "ip.loss", status.Loss))
+		metrics = append(metrics, NewMetric(ip, "ip.lost", fmt.Sprintf("%d", status.Lost)))
+		metrics = append(metrics, NewMetric(ip, "ip.ms", fmt.Sprintf("%d", status.MsAvg)))
+
 	}
 
 	// create packet

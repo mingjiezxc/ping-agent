@@ -29,17 +29,14 @@ func IcmpListenServer() {
 
 		pingResult := time.Now().UnixNano() - BytesToInt64(body[4:])
 
-		// get key pttl
-		pttl := ipMap[ip].PTLL
-
 		// ip count + 1
 		ipMap[ip].ReceiveCount++
 
 		// ip info last time
-		ipMap[ip].UpdateTime = time.Now()
+		ipMap[ip].UpdateTime = time.Now().Unix()
 
 		// set key and var and set pttl
-		rdb.SetEX(ctx, AgentName+"_"+ip, pingResult, time.Duration(pttl)*time.Second)
+		rdb.SetEX(ctx, AgentName+"_"+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
 
 		ipMap[ip].Ms = append(ipMap[ip].Ms, pingResult)
 

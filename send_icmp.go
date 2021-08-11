@@ -132,11 +132,22 @@ func StartErrListPingJob() {
 
 	c.AddFunc("* * * * * *", func() {
 		ips, _ := rdb.SMembers(ctx, AgentName+"err_ip").Result()
+		var metrics []*Metric
 
 		for _, ip := range ips {
 			sendPingMsg(ip)
 			ipMap[ip].SendCount++
+			if time.Now().Unix()-ipMap[ip].UpdateTime > config.ErrIPICMPTimeOut {
+				metrics = append(metrics, NewMetric(ip, "ip.ms", "0"))
+			}
+
 		}
+
+		// Send packet to zabbix
+		packet := NewPacket(metrics)
+		z := NewSender(config.ZabbixServer, config.zabbixPort)
+		z.Send(packet)
+
 	})
 
 	c.Start()

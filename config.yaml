@@ -1,5 +1,6 @@
   // redis master key
   AgentName  : ""
+  AgentNameOnlineTime: 185
 
   // redis server info
   RedisAddr:     "localhost:6379"
@@ -7,11 +8,19 @@
   RedisDB:       0
 
   // job seting
-  ErrIPRemoveJobSpec: "* * * * *"
   MemoryIPStatusCheckSpec: "* * * * *" 
+
+  // err ip seting
+  // 错误IP列 检查工作 Spec
+  ErrIPRemoveJobSpec: "* * * * *" 
+  // 
+  ErrIPICMPTimeOut: 3
+  // 错误IP列 检查IP掉包数量，如低于或等于该值移除 IP
+  ErrIPRemoteListAllowedPacketLossData: 0  
 
   // zabbix Trapper
   ZabbixTrapper: false
+  ZabbixSendSPEC: "*/2 * * * *"
   ZabbixServer: ""
   zabbixPort: ""
 
