@@ -85,9 +85,12 @@ func GetAgentPingJobs() (allPingJob []PingJob, tmpGroupMap map[string][]string, 
 
 }
 
-func StartPingConJob(v interface{}) {
+func StartPingConJob(jobs []PingJob) {
 
 	c := cron.New(cron.WithSeconds())
+	for _, job := range jobs {
+		c.AddJob(job.SPEC, job)
+	}
 
 	c.Start()
 	defer c.Stop()

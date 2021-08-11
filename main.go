@@ -57,6 +57,7 @@ func main() {
 
 	for {
 		StartPingJobs()
+		time.Sleep(3 * time.Second)
 	}
 
 }
@@ -65,15 +66,24 @@ func StartPingJobs() {
 	// get data
 	JobData, groupData, err := GetAgentPingJobs()
 
-	groupMap = groupData
-
 	if err != nil {
 		log.Panicln(err.Error())
 		return
 	}
 
+	groupMap = groupData
+	// update ip PTLL & allowed loss
+	for _, job := range JobData {
+		for _, group := range job.Group {
+			for _, ip := range groupData[group] {
+				ipMap[ip].PTLL = job.PTLL
+				ipMap[ip].PTLL = job.AllowedLoss
+			}
+		}
+	}
+
 	// start job
-	go StartPingConJob(&JobData)
+	go StartPingConJob(JobData)
 
 	// check request data change
 	for {
@@ -93,6 +103,16 @@ func StartPingJobs() {
 		// job not change update ip group data
 		groupMap = tmpGroupData
 
+		// update ip PTLL & allowed loss
+		for _, job := range JobData {
+			for _, group := range job.Group {
+				for _, ip := range groupData[group] {
+					ipMap[ip].PTLL = job.PTLL
+					ipMap[ip].PTLL = job.AllowedLoss
+				}
+			}
+		}
+
 		time.Sleep(time.Duration(60) * time.Second)
 
 	}
@@ -111,7 +131,7 @@ type PingJob struct {
 	SPEC        string
 	Name        string
 	Group       []string
-	PTLL        float64
+	PTLL        int64
 	AllowedLoss int64
 }
 
@@ -136,7 +156,6 @@ type IPStatus struct {
 	MsAvg        int64
 	Loss         string
 	Lost         int64
-	Del          bool
 	UpdateTime   int64
 }
 

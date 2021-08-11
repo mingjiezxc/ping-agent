@@ -66,7 +66,7 @@ func MemoryErrIPCheck() {
 					continue
 				}
 
-				rdb.SAdd(ctx, AgentName+"err_ip", ip).Result()
+				rdb.SAdd(ctx, AgentName+"err_ip", ip).Err()
 
 			}
 		}
