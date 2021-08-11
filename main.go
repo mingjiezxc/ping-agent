@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io/ioutil"
 	"log"
+	"reflect"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v2"
 )
 
@@ -27,6 +30,26 @@ var (
 	JobData  []PingJob
 	ipMap    = make(map[string]*IPStatus)
 	groupMap = make(map[string][]string)
+)
+
+// redis key
+var (
+	// pls add AgentName
+	AgentListKey        = "agent-list"
+	AgentOnlineKey      = "agent-online_"
+	AgentErrListKey     = "agent-err-list_"
+	AgentJobListKey     = "agent-job-list"
+	AgentAllIPStatusKey = "agent-all-ip-status_"
+	// pls add AgentName & ipAddr
+	AgentIPLastMsKey = "agent-ip-last-ms_"
+
+	GroupListKey = "group-list"
+	// pl add groupName
+	GroupNameKey = "group_"
+
+	JobListKey = "job-list"
+	// pl add jobName
+	JobNameKey = "job_"
 )
 
 func init() {
@@ -128,11 +151,11 @@ func CheckPrintErr(err error) bool {
 }
 
 type PingJob struct {
-	SPEC        string
 	Name        string
-	Group       []string
+	SPEC        string
 	PTLL        int64
 	AllowedLoss int64
+	Group       []string
 }
 
 func (g PingJob) Run() {
@@ -173,4 +196,89 @@ type ConfigYaml struct {
 	ZabbixSendSPEC                       string
 	ErrIPRemoteListAllowedPacketLossData int64
 	ErrIPICMPTimeOut                     int64
+}
+
+func JobCheck(newJob []PingJob) bool {
+	// // check len
+	// if len(JobData) != len(newJob) {
+	// 	return errors.New("length inconsistent")
+	// }
+
+	// // check name and time, and update ip
+	// for _, n := range newJob {
+	// 	checkStatus := false
+	// 	for _, o := range JobData {
+	// 		if n.Name == o.Name {
+	// 			if n.SPEC == o.SPEC {
+	// 				o.Group = n.Group
+	// 				checkStatus = true
+	// 				break
+	// 			}
+	// 		}
+	// 	}
+	// 	if !checkStatus {
+	// 		return errors.New("job is not update")
+	// 	}
+	// }
+
+	return reflect.DeepEqual(JobData, newJob)
+
+}
+
+func GetAgentPingJobs() (allPingJob []PingJob, tmpGroupMap map[string][]string, err error) {
+	// get agent config
+	jobs, err := rdb.SMembers(ctx, AgentJobListKey+AgentName).Result()
+	if CheckPrintErr(err) {
+		return
+	}
+
+	// get job config
+	for _, jobName := range jobs {
+
+		// get job data
+		// data: {SPEC:"* * * * *" , name:"xxxx", group:["xxx", "ccc"]}
+		job, err := rdb.Get(ctx, JobNameKey+jobName).Result()
+		if CheckPrintErr(err) {
+			continue
+		}
+		var tmpPingJob PingJob
+		err = json.Unmarshal([]byte(job), &tmpPingJob)
+		if CheckPrintErr(err) {
+			continue
+		}
+
+		allPingJob = append(allPingJob, tmpPingJob)
+
+	}
+
+	// get all ip group
+	groups, err := rdb.SMembers(ctx, GroupListKey).Result()
+
+	tmpGroupMap = make(map[string][]string)
+
+	for _, groupName := range groups {
+		ips, err := rdb.SMembers(ctx, GroupNameKey+groupName).Result()
+		if CheckPrintErr(err) {
+			continue
+		}
+		tmpGroupMap[groupName] = ips
+
+	}
+
+	return
+
+}
+
+func StartPingConJob(jobs []PingJob) {
+
+	c := cron.New(cron.WithSeconds())
+	for _, job := range jobs {
+		c.AddJob(job.SPEC, job)
+	}
+
+	c.Start()
+	defer c.Stop()
+
+	<-pingConJobEndChan
+
 }

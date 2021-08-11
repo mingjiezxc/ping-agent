@@ -30,14 +30,14 @@ func StartCronJobs() {
 
 func CheckErrIPRemove() {
 
-	ips, _ := rdb.SMembers(ctx, AgentName+"err_ip").Result()
+	ips, _ := rdb.SMembers(ctx, AgentErrListKey).Result()
 
 	// check err job ip list ,if restore remove ip on err list
 	for _, ip := range ips {
 		sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
 
 		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) < config.ErrIPRemoteListAllowedPacketLossData && ipMap[ip].PTLL > sub1 {
-			err := rdb.SRem(ctx, AgentName+"err_ip", ip).Err()
+			err := rdb.SRem(ctx, AgentErrListKey, ip).Err()
 			CheckPrintErr(err)
 		}
 
@@ -62,11 +62,11 @@ func MemoryErrIPCheck() {
 			if ipMap[ip].PTLL < sub1 {
 
 				// check ip on errIP list
-				if err := rdb.SIsMember(ctx, AgentName+"err_ip", ip).Err(); err != nil {
+				if err := rdb.SIsMember(ctx, AgentErrListKey, ip).Err(); err != nil {
 					continue
 				}
 
-				rdb.SAdd(ctx, AgentName+"err_ip", ip).Err()
+				rdb.SAdd(ctx, AgentErrListKey, ip).Err()
 
 			}
 		}
@@ -84,10 +84,10 @@ func ArryInCheck(val string, arry []string) bool {
 }
 
 func AgentOnline() {
-	err := rdb.SAdd(ctx, "agent-list", AgentName).Err()
+	err := rdb.SAdd(ctx, AgentListKey, AgentName).Err()
 	CheckPrintErr(err)
 
-	err = rdb.SetEX(ctx, "agent-online_"+AgentName, "ok", time.Duration(config.AgentNameOnlineTime)*time.Second).Err()
+	err = rdb.SetEX(ctx, AgentOnlineKey, "ok", time.Duration(config.AgentNameOnlineTime)*time.Second).Err()
 	CheckPrintErr(err)
 
 }
@@ -98,6 +98,6 @@ func UpdateAgnetAllIpStatus() {
 		return
 	}
 
-	err = rdb.SAdd(ctx, AgentName+"_all-ip-status", data).Err()
+	err = rdb.SAdd(ctx, AgentAllIPStatusKey , data).Err()
 	CheckPrintErr(err)
 }

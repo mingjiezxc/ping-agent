@@ -36,18 +36,34 @@ key: agent-err-list_$agent
 type: set
 value: ["192.168.1.2", "192.168.1.1",  "192.168.2.1"]
 
+// ip 最新 ms 值 , agent 监听 timeout 事件，如发生将 ip ，添加至 err list
+key: agent-ip-last-ms_$agent_$ip
+type: string
+value: 11
+
+// ip 状态 
+key: agent-all-ip-status_$agent
+type: string
+value: {ip: {SendCount, ReturnCount, ip, InErrList} }
+
+// agent 的错误IP 列表
+key: agent-err-list_$agent
+type: set
+value: ["192.16.111.1"]
+
+
 // cron job list 名称
-key: agent-jobs_$agent
+key: job-list
 type: set 
 value: ["xxx", "kkk", "ccc"]
 
 // job status
-key: agent_$agent_$jobname
+key: job_$jobname
 type: string
 value: {SPEC:"* * * * *" , name:"xxxx", group:["group1", "ccc"]}
 
 // ip group list
-key: groups-list
+key: group-list
 type: set
 value: ["group1","ccc","bbb"]
 
@@ -55,22 +71,6 @@ value: ["group1","ccc","bbb"]
 key: group_$groupName
 type: set
 value: ["192.18.1.1", "192.168.2.1"]
-
-// ip 最新 ms 值 , agent 监听 timeout 事件，如发生将 ip ，添加至 err list
-key: $agent_$ip,  
-type: string
-value: 11
-
-// ip 状态 
-key: $agent_all-ip-status
-type: string
-value: {ip: {SendCount, ReturnCount, ip, InErrList} }
-
-// agent 的错误IP 列表
-key: $agent_err_ip
-type: set
-value: ["192.16.111.1"]
-
 
 ```
 

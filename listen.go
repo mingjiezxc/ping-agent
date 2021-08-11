@@ -36,7 +36,7 @@ func IcmpListenServer() {
 		ipMap[ip].UpdateTime = time.Now().Unix()
 
 		// set key and var and set pttl
-		rdb.SetEX(ctx, AgentName+"_"+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
+		rdb.SetEX(ctx, AgentIPLastMsKey+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
 
 		ipMap[ip].Ms = append(ipMap[ip].Ms, pingResult)
 
@@ -57,10 +57,10 @@ func SubExpiredTLL() {
 	for msg := range ch {
 		payload := msg.Payload
 
-		match, _ := regexp.MatchString(AgentName+`_((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
+		match, _ := regexp.MatchString(AgentIPLastMsKey+`((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
 		if match {
 			s := strings.Split(payload, "_")
-			rdb.SAdd(ctx, AgentName+"err_ip", s[1]).Result()
+			rdb.SAdd(ctx, AgentErrListKey, s[1]).Result()
 		}
 	}
 
