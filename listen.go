@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,18 +29,24 @@ func IcmpListenServer() {
 
 		ip := sourceIP.String()
 
-		pingResult := time.Now().UnixNano() - BytesToInt64(body[4:])
+		if nano := BodyUnixNanoCheck(body[4:]); nano == 0 {
+			continue
+		} else {
+			// get ping time
+			pingResult := time.Now().UnixNano() - nano
 
-		// ip count + 1
-		ipMap[ip].ReceiveCount++
+			// ip count + 1
+			ipMap[ip].ReceiveCount++
 
-		// ip info last time
-		ipMap[ip].UpdateTime = time.Now().Unix()
+			// ip info last time
+			ipMap[ip].UpdateTime = time.Now().Unix()
 
-		// set key and var and set pttl
-		rdb.SetEX(ctx, AgentIPLastMsKey+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
+			// add ping remaek
+			ipMap[ip].Ms = append(ipMap[ip].Ms, pingResult)
 
-		ipMap[ip].Ms = append(ipMap[ip].Ms, pingResult)
+			// set key and var and set pttl
+			rdb.SetEX(ctx, AgentIPLastMsKey+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
+		}
 
 	}
 
@@ -64,4 +72,20 @@ func SubExpiredTLL() {
 		}
 	}
 
+}
+
+func BodyUnixNanoCheck(body []byte) (t int64) {
+	// 1628740059096962098
+	data := fmt.Sprintf("%s", body)
+
+	t, err := strconv.ParseInt(data, 10, 64)
+	if err != nil {
+		return
+	}
+
+	match, _ := regexp.MatchString("[1-9]{16}", data)
+	if match {
+		return
+	}
+	return 0
 }
