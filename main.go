@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"time"
 
@@ -38,7 +39,7 @@ var (
 	AgentListKey        = "agent-list"
 	AgentOnlineKey      = "agent-online_"
 	AgentErrListKey     = "agent-err-list_"
-	AgentJobListKey     = "agent-job-list"
+	AgentJobListKey     = "agent-job-list_"
 	AgentAllIPStatusKey = "agent-all-ip-status_"
 	// pls add AgentName & ipAddr
 	AgentIPLastMsKey = "agent-ip-last-ms_"
@@ -54,20 +55,27 @@ var (
 
 func init() {
 
-	AgentName = config.AgentName
-
 	// read config file
 	configfile, err := ioutil.ReadFile("./config.yaml")
-	log.Panicln(err.Error())
+	if CheckPrintErr(err) {
+		os.Exit(1)
+	}
 
+	// yaml marshal config
 	err = yaml.Unmarshal(configfile, &config)
-	log.Panicln(err.Error())
+	if CheckPrintErr(err) {
+		os.Exit(2)
+	}
 
+	// create redis client
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 		DB:       config.RedisDB,
 	})
+
+	// config agent name
+	AgentName = config.AgentName
 
 }
 
@@ -78,6 +86,8 @@ func main() {
 	go StartCronJobs()
 	go StartErrListPingJob()
 
+	log.Println("app start")
+
 	for {
 		StartPingJobs()
 		time.Sleep(3 * time.Second)
@@ -87,7 +97,8 @@ func main() {
 
 func StartPingJobs() {
 	// get data
-	JobData, groupData, err := GetAgentPingJobs()
+	jobs, groupData, err := GetAgentPingJobs()
+	JobData = jobs
 
 	if err != nil {
 		log.Panicln(err.Error())
@@ -96,14 +107,7 @@ func StartPingJobs() {
 
 	groupMap = groupData
 	// update ip PTLL & allowed loss
-	for _, job := range JobData {
-		for _, group := range job.Group {
-			for _, ip := range groupData[group] {
-				ipMap[ip].PTLL = job.PTLL
-				ipMap[ip].PTLL = job.AllowedLoss
-			}
-		}
-	}
+	UpdateIpMapData()
 
 	// start job
 	go StartPingConJob(JobData)
@@ -119,7 +123,7 @@ func StartPingJobs() {
 		// job change restart StartPingConJob
 		if !JobCheck(tmpJobData) {
 			pingConJobEndChan <- 0
-
+			log.Println("Config Change Restart Ping Job")
 			return
 		}
 
@@ -127,19 +131,34 @@ func StartPingJobs() {
 		groupMap = tmpGroupData
 
 		// update ip PTLL & allowed loss
-		for _, job := range JobData {
-			for _, group := range job.Group {
-				for _, ip := range groupData[group] {
-					ipMap[ip].PTLL = job.PTLL
-					ipMap[ip].PTLL = job.AllowedLoss
-				}
-			}
-		}
+		UpdateIpMapData()
 
 		time.Sleep(time.Duration(60) * time.Second)
 
 	}
 
+}
+
+func UpdateIpMapData() {
+	for _, job := range JobData {
+		for _, group := range job.Group {
+			for _, ip := range groupMap[group] {
+
+				if _, ok := ipMap[ip]; ok {
+					ipMap[ip].PTLL = job.PTLL
+					ipMap[ip].AllowedLoss = job.AllowedLoss
+				} else {
+					ipMap[ip] = &IPStatus{
+						IP:          ip,
+						PTLL:        job.PTLL,
+						AllowedLoss: job.AllowedLoss,
+						Agent:       AgentName,
+					}
+				}
+
+			}
+		}
+	}
 }
 
 func CheckPrintErr(err error) bool {
@@ -151,11 +170,11 @@ func CheckPrintErr(err error) bool {
 }
 
 type PingJob struct {
-	Name        string
-	SPEC        string
-	PTLL        int64
-	AllowedLoss int64
-	Group       []string
+	Name        string   `json:"name" example:"job1"`
+	SPEC        string   `json:"spec" example:"*/10 * * * * *"`
+	PTLL        int64    `json:"pttl" example:"3"`
+	AllowedLoss int64    `json:"allowedloss" example:"0"`
+	Group       []string `json:"group" example:"abc,kkk"`
 }
 
 func (g PingJob) Run() {
@@ -169,6 +188,7 @@ func (g PingJob) Run() {
 }
 
 type IPStatus struct {
+	Agent        string
 	IP           string
 	PTLL         int64
 	AllowedLoss  int64
@@ -183,46 +203,22 @@ type IPStatus struct {
 }
 
 type ConfigYaml struct {
-	AgentName                            string
-	AgentNameOnlineTime                  int
-	RedisAddr                            string
-	RedisPassword                        string
-	RedisDB                              int
-	ErrIPRemoveJobSpec                   string
-	MemoryIPStatusCheckSpec              string
-	ZabbixTrapper                        bool
-	ZabbixServer                         string
-	zabbixPort                           int
-	ZabbixSendSPEC                       string
-	ErrIPRemoteListAllowedPacketLossData int64
-	ErrIPICMPTimeOut                     int64
+	AgentName               string `yaml:"AgentName"`
+	AgentNameOnlineTime     int    `yaml:"AgentNameOnlineTime"`
+	RedisAddr               string `yaml:"RedisAddr"`
+	RedisPassword           string `yaml:"RedisPassword"`
+	RedisDB                 int    `yaml:"RedisDB"`
+	ErrIPRemoveJobSpec      string `yaml:"ErrIPRemoveJobSpec"`
+	MemoryIPStatusCheckSpec string `yaml:"MemoryIPStatusCheckSpec"`
+	ZabbixTrapper           bool   `yaml:"ZabbixTrapper"`
+	ZabbixServer            string `yaml:"ZabbixServer"`
+	ZabbixPort              int    `yaml:"ZabbixPort"`
+	ZabbixSendSpec          string `yaml:"ZabbixSendSpec"`
+	ErrIPICMPTimeOut        int64  `yaml:"ErrIPICMPTimeOut"`
 }
 
 func JobCheck(newJob []PingJob) bool {
-	// // check len
-	// if len(JobData) != len(newJob) {
-	// 	return errors.New("length inconsistent")
-	// }
-
-	// // check name and time, and update ip
-	// for _, n := range newJob {
-	// 	checkStatus := false
-	// 	for _, o := range JobData {
-	// 		if n.Name == o.Name {
-	// 			if n.SPEC == o.SPEC {
-	// 				o.Group = n.Group
-	// 				checkStatus = true
-	// 				break
-	// 			}
-	// 		}
-	// 	}
-	// 	if !checkStatus {
-	// 		return errors.New("job is not update")
-	// 	}
-	// }
-
 	return reflect.DeepEqual(JobData, newJob)
-
 }
 
 func GetAgentPingJobs() (allPingJob []PingJob, tmpGroupMap map[string][]string, err error) {

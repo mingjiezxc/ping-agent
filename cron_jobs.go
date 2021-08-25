@@ -14,6 +14,9 @@ func StartCronJobs() {
 	// update redis agent status and regedit
 	c.AddFunc("* * * * *", AgentOnline)
 
+	// update redis agent all ip status key
+	c.AddFunc("* * * * *", UpdateAgnetAllIpStatus)
+
 	// check err ip list ,if restore remove
 	c.AddFunc(config.ErrIPRemoveJobSpec, CheckErrIPRemove)
 
@@ -21,7 +24,7 @@ func StartCronJobs() {
 	c.AddFunc(config.MemoryIPStatusCheckSpec, MemoryErrIPCheck)
 
 	// zabbix data send
-	c.AddFunc(config.ZabbixSendSPEC, SendIpHostDirAndIPStatus)
+	c.AddFunc(config.ZabbixSendSpec, SendIpHostDirAndIPStatus)
 
 	c.Start()
 	defer c.Stop()
@@ -30,24 +33,18 @@ func StartCronJobs() {
 
 func CheckErrIPRemove() {
 
-	ips, _ := rdb.SMembers(ctx, AgentErrListKey).Result()
+	ips, _ := rdb.SMembers(ctx, AgentErrListKey+AgentName).Result()
 
 	// check err job ip list ,if restore remove ip on err list
 	for _, ip := range ips {
 		sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
-
-		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) < config.ErrIPRemoteListAllowedPacketLossData && ipMap[ip].PTLL > sub1 {
-			err := rdb.SRem(ctx, AgentErrListKey, ip).Err()
+		if (ipMap[ip].SendCount-ipMap[ip].ReceiveCount) <= ipMap[ip].AllowedLoss && ipMap[ip].PTLL > sub1 {
+			err := rdb.SRem(ctx, AgentErrListKey+AgentName, ip).Err()
+			ipMap[ip].InErrList = false
 			CheckPrintErr(err)
+		} else {
+			ipMap[ip].InErrList = true
 		}
-
-		// clear count
-		ipMap[ip].MsAvg = Int64Avg(ipMap[ip].Ms)
-		ipMap[ip].Loss = fmt.Sprintf("%.2f", float64(ipMap[ip].ReceiveCount)/float64(ipMap[ip].SendCount))
-		ipMap[ip].Lost = ipMap[ip].SendCount - ipMap[ip].ReceiveCount
-		ipMap[ip].ReceiveCount = 0
-		ipMap[ip].SendCount = 0
-		ipMap[ip].Ms = []int64{}
 
 	}
 
@@ -57,18 +54,27 @@ func MemoryErrIPCheck() {
 	// check ip status if now - LastTime > ptll,add to err job
 	for _, v := range groupMap {
 		for _, ip := range v {
-			sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
 
-			if ipMap[ip].PTLL < sub1 {
-
-				// check ip on errIP list
-				if err := rdb.SIsMember(ctx, AgentErrListKey, ip).Err(); err != nil {
-					continue
-				}
-
-				rdb.SAdd(ctx, AgentErrListKey, ip).Err()
-
+			if _, ok := ipMap[ip]; !ok {
+				continue
 			}
+
+			sub1 := time.Now().Unix() - ipMap[ip].UpdateTime
+			if ipMap[ip].PTLL < sub1 {
+				rdb.SAdd(ctx, AgentErrListKey+AgentName, ip).Err()
+				if _, ok := ipMap[ip]; ok {
+					ipMap[ip].InErrList = true
+				}
+			}
+
+			// clear count
+			ipMap[ip].MsAvg = Int64Avg(ipMap[ip].Ms)
+			ipMap[ip].Loss = fmt.Sprintf("%.2f", float64(ipMap[ip].ReceiveCount)/float64(ipMap[ip].SendCount))
+			ipMap[ip].Lost = ipMap[ip].SendCount - ipMap[ip].ReceiveCount
+			ipMap[ip].ReceiveCount = 0
+			ipMap[ip].SendCount = 0
+			ipMap[ip].Ms = []int64{}
+
 		}
 	}
 
@@ -87,17 +93,22 @@ func AgentOnline() {
 	err := rdb.SAdd(ctx, AgentListKey, AgentName).Err()
 	CheckPrintErr(err)
 
-	err = rdb.SetEX(ctx, AgentOnlineKey, "ok", time.Duration(config.AgentNameOnlineTime)*time.Second).Err()
+	err = rdb.SetEX(ctx, AgentOnlineKey+AgentName, "online", time.Duration(config.AgentNameOnlineTime)*time.Second).Err()
 	CheckPrintErr(err)
 
 }
 
 func UpdateAgnetAllIpStatus() {
+
+	// for ipStr, _ := range ipMap {
+	// 	ipMap[ipStr].Agent = AgentName
+	// }
+
 	data, err := json.Marshal(ipMap)
 	if CheckPrintErr(err) {
 		return
 	}
 
-	err = rdb.SAdd(ctx, AgentAllIPStatusKey , data).Err()
+	err = rdb.Set(ctx, AgentAllIPStatusKey+AgentName, data, 0).Err()
 	CheckPrintErr(err)
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,14 +25,23 @@ func IcmpListenServer() {
 		CheckPrintErr(err)
 
 		body, _ := rm.Body.Marshal(58)
-
 		ip := sourceIP.String()
 
 		if nano := BodyUnixNanoCheck(body[4:]); nano == 0 {
 			continue
 		} else {
+			timeNow := time.Now().UnixNano()
 			// get ping time
-			pingResult := time.Now().UnixNano() - nano
+			// if timeNow < nano {
+			// 	continue
+			// }
+			pingResult := timeNow - nano
+
+			if pingResult < 1000000 {
+				pingResult = 1
+			} else {
+				pingResult = pingResult / 1000000
+			}
 
 			// ip count + 1
 			ipMap[ip].ReceiveCount++
@@ -68,7 +76,11 @@ func SubExpiredTLL() {
 		match, _ := regexp.MatchString(AgentIPLastMsKey+`((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
 		if match {
 			s := strings.Split(payload, "_")
-			rdb.SAdd(ctx, AgentErrListKey, s[1]).Result()
+			rdb.SAdd(ctx, AgentErrListKey+AgentName, s[1]).Result()
+			if _, ok := ipMap[s[1]]; ok {
+				ipMap[s[1]].InErrList = true
+			}
+
 		}
 	}
 
@@ -76,14 +88,8 @@ func SubExpiredTLL() {
 
 func BodyUnixNanoCheck(body []byte) (t int64) {
 	// 1628740059096962098
-	data := fmt.Sprintf("%s", body)
-
-	t, err := strconv.ParseInt(data, 10, 64)
-	if err != nil {
-		return
-	}
-
-	match, _ := regexp.MatchString("[1-9]{16}", data)
+	t = BytesToInt64(body)
+	match, _ := regexp.MatchString("[0-9]{19}", fmt.Sprintf("%d", t))
 	if match {
 		return
 	}

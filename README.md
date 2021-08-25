@@ -44,7 +44,36 @@ value: 11
 // ip 状态 
 key: agent-all-ip-status_$agent
 type: string
-value: {ip: {SendCount, ReturnCount, ip, InErrList} }
+value: 
+
+type IPStatus struct {
+   // agent 名称
+	Agent        string
+   // ip address
+	IP           string
+   // redis key time out
+	PTLL         int64
+   // 在 err list 时 ErrIPRemoveJobSpec 允许掉多少个包
+	AllowedLoss  int64
+   // ErrIPRemoveJobSpec 发送 icmp 包数量
+	SendCount    int64
+   // ErrIPRemoveJobSpec 收到 icmp 包数量
+	ReceiveCount int64
+   // 是否在 err list
+	InErrList    bool
+   // ErrIPRemoveJobSpec ping的 ms 值
+	Ms           []int64
+   // ms 的平均值 
+	MsAvg        int64
+   // ErrIPRemoveJobSpec 丢包率
+	Loss         string
+   // ErrIPRemoveJobSpec 丢包数量
+	Lost         int64
+   // 收到最后一个 icmp 的时间
+	UpdateTime   int64
+}
+
+
 
 // agent 的错误IP 列表
 key: agent-err-list_$agent
@@ -60,7 +89,19 @@ value: ["xxx", "kkk", "ccc"]
 // job status
 key: job_$jobname
 type: string
-value: {SPEC:"* * * * *" , name:"xxxx", group:["group1", "ccc"]}
+value: 
+type JobStruct struct {
+   // job 循环周期
+	SPEC  string   `json:"spec" example:"*/10 * * * * *"`
+   // job name
+	Name  string   `json:"name" example:"job1"`
+   // use ip group
+	Group []string `json:"group" example:"group1,group2"`
+   // redis key time out 
+	PTTL  int64    `json:"pttl" example:"21"`
+   // 计算周期(ErrIPRemoveJobSpec)内允许掉多少个包，认为是已恢复，并将ip 从 err list中移除
+   AllowedLoss int64 `json:"allowedloss" example:"1"`
+}
 
 // ip group list
 key: group-list

@@ -1,26 +1,26 @@
-  // redis master key
-  AgentName  : ""
-  AgentNameOnlineTime: 185
+# redis master key
+AgentName: abc
+AgentNameOnlineTime: 185
 
-  // redis server info
-  RedisAddr:     "localhost:6379"
-  RedisPassword: ""
-  RedisDB:       0
+# redis server info
+RedisAddr:     "localhost:6379"
+RedisPassword: ""
+RedisDB:       0
 
-  // job seting
-  MemoryIPStatusCheckSpec: "* * * * *" 
+# job seting
+MemoryIPStatusCheckSpec: "* * * * *" 
 
-  // err ip seting
-  // 错误IP列 检查工作 Spec
-  ErrIPRemoveJobSpec: "* * * * *" 
-  // 错误IP列 icmp time out
-  ErrIPICMPTimeOut: 3
-  // 错误IP列 检查IP掉包数量，如低于或等于该值移除 IP
-  ErrIPRemoteListAllowedPacketLossData: 0  
+# err ip seting
+# 错误IP列 检查工作 Spec
+ErrIPRemoveJobSpec: "* * * * *" 
+# 错误IP列 icmp time out
+ErrIPICMPTimeOut: 3
+# 错误IP列 检查IP掉包数量，如低于或等于该值移除 IP
+ErrIPRemoteListAllowedPacketLossData: 0  
 
-  // zabbix Trapper
-  ZabbixTrapper: false
-  ZabbixSendSPEC: "*/2 * * * *"
-  ZabbixServer: ""
-  zabbixPort: ""
+# zabbix Trapper
+ZabbixTrapper: false
+ZabbixSendSpec: "* * * * *"
+ZabbixServer: ""
+ZabbixPort: 10051
 

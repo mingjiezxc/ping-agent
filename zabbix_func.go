@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // zabbix send host dir and ip status
 func SendIpHostDirAndIPStatus() {
@@ -24,12 +26,19 @@ func SendIpHostDirAndIPStatus() {
 	packet := NewPacket(metrics)
 
 	// Send packet to zabbix
-	z := NewSender(config.ZabbixServer, config.zabbixPort)
+	z := NewSender(config.ZabbixServer, config.ZabbixPort)
 	z.Send(packet)
 
 }
 
 func Int64Avg(i []int64) int64 {
+	if len(i) == 1 {
+		return i[0]
+	}
+
+	if len(i) == 0 {
+		return 0
+	}
 
 	var intSum int64
 	for _, v := range i {
