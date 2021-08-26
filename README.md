@@ -20,27 +20,27 @@
 
 ---------------------------------------------------------------
    配置例子说明：
-1. 如下配置
-   job:
-     SPEC: */5 * * * * * *
-     PTTL: 21
-     AllowedLoss: 2
+1. 如下配置  
+   job:  
+     SPEC: */5 * * * * * *  
+     PTTL: 21  
+     AllowedLoss: 2  
 
-   效果：
-      job list 中
-   1. 每5秒发一次 icmp 包
-   2. 21 秒内无收到返回移至 Err List
+   效果：  
+      job list 中  
+   1. 每5秒发一次 icmp 包  
+   2. 21 秒内无收到返回移至 Err List  
    
-      如在 Err list 中（默认JOB: "* * * * * *"）
-   1. 每1秒发一次 icmp 包
+      如在 Err list 中（默认JOB: "* * * * * *"）  
+   1. 每1秒发一次 icmp 包  
    2. 每1分钟检查发送数量与接收数量检查是否移出 Err List
    3. err list 每分钟发送约 60 , job list 依旧会正常发送
-      Send - Receive => AllowedLoss 
+      Send - Receive => AllowedLoss   
 
-      Send: 72, Receive:50 : 不移出
-      Send: 72, Receive:69 : 不移出
-      Send: 72, Receive:70 : 移出
-      Send: 72, Receive:72 : 移出
+      Send: 72, Receive:50 : 不移出  
+      Send: 72, Receive:69 : 不移出  
+      Send: 72, Receive:70 : 移出  
+      Send: 72, Receive:72 : 移出  
 
 
 ## redis key
