@@ -1,6 +1,7 @@
 # redis master key
 AgentName: abc
 AgentNameOnlineTime: 185
+IcmpListenLine: 5
 
 # redis server info
 RedisAddr:     "localhost:6379"

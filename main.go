@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"regexp"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -31,10 +32,14 @@ var (
 	JobData  []PingJob
 	ipMap    = make(map[string]*IPStatus)
 	groupMap = make(map[string][]string)
+
+	AgentIPLastMsKeyCompile *regexp.Regexp
+
+	IcmpListenChan = make(chan IcmpData, 100000)
 )
 
 // redis key
-var (
+const (
 	// pls add AgentName
 	AgentListKey        = "agent-list"
 	AgentOnlineKey      = "agent-online_"
@@ -77,11 +82,17 @@ func init() {
 	// config agent name
 	AgentName = config.AgentName
 
+	AgentIPLastMsKeyCompile, _ = regexp.Compile(AgentIPLastMsKey + `((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`)
+
 }
 
 func main() {
 
 	go IcmpListenServer()
+	for i := 0; i < config.IcmpListenLine; i++ {
+		go IcmpListenJob()
+	}
+
 	go SubExpiredTLL()
 	go StartCronJobs()
 	go StartErrListPingJob()
@@ -205,6 +216,7 @@ type IPStatus struct {
 type ConfigYaml struct {
 	AgentName               string `yaml:"AgentName"`
 	AgentNameOnlineTime     int    `yaml:"AgentNameOnlineTime"`
+	IcmpListenLine          int    `yaml:"IcmpListenLine"`
 	RedisAddr               string `yaml:"RedisAddr"`
 	RedisPassword           string `yaml:"RedisPassword"`
 	RedisDB                 int    `yaml:"RedisDB"`

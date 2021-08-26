@@ -18,6 +18,31 @@
 5. cron job 定时检查 memory 中的 ip status，如无收到包 或 ping timeout，将IP 加入 err list
 6. 每分钟检查 err list 掉包率,如低于检查值从 err list 移走 ip
 
+---------------------------------------------------------------
+   配置例子说明：
+1. 如下配置
+   job:
+     SPEC: */5 * * * * * *
+     PTTL: 21
+     AllowedLoss: 2
+
+   效果：
+      job list 中
+   1. 每5秒发一次 icmp 包
+   2. 21 秒内无收到返回移至 Err List
+   
+      如在 Err list 中（默认JOB: "* * * * * *"）
+   1. 每1秒发一次 icmp 包
+   2. 每1分钟检查发送数量与接收数量检查是否移出 Err List
+   3. err list 每分钟发送约 60 , job list 依旧会正常发送
+      Send - Receive => AllowedLoss 
+
+      Send: 72, Receive:50 : 不移出
+      Send: 72, Receive:69 : 不移出
+      Send: 72, Receive:70 : 移出
+      Send: 72, Receive:72 : 移出
+
+
 ## redis key
 
 ```bash

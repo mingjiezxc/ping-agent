@@ -3,12 +3,18 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"regexp"
 	"strings"
 	"time"
 
 	"golang.org/x/net/icmp"
 )
+
+type IcmpData struct {
+	IP  net.Addr
+	msg *icmp.Message
+}
 
 func IcmpListenServer() {
 	c, err := icmp.ListenPacket("ip4:icmp", ListenAddr)
@@ -18,25 +24,36 @@ func IcmpListenServer() {
 	defer c.Close()
 	rb := make([]byte, 1500)
 	for {
+
 		n, sourceIP, err := c.ReadFrom(rb)
 		CheckPrintErr(err)
 
 		rm, err := icmp.ParseMessage(58, rb[:n])
 		CheckPrintErr(err)
 
-		body, _ := rm.Body.Marshal(58)
-		ip := sourceIP.String()
+		IcmpListenChan <- IcmpData{IP: sourceIP, msg: rm}
+	}
+
+}
+
+func IcmpListenJob() {
+	for data := range IcmpListenChan {
+		body, _ := data.msg.Body.Marshal(58)
+		ip := data.IP.String()
 
 		if nano := BodyUnixNanoCheck(body[4:]); nano == 0 {
 			continue
 		} else {
+			// check ping data Unix Nano time
 			timeNow := time.Now().UnixNano()
-			// get ping time
-			// if timeNow < nano {
-			// 	continue
-			// }
+			// check val 是否正常
+			if timeNow > nano {
+				continue
+			}
+			// 计算 ping 时间值
 			pingResult := timeNow - nano
 
+			// 转换单位为 ms, 不足 1ms 计 1ms
 			if pingResult < 1000000 {
 				pingResult = 1
 			} else {
@@ -54,10 +71,9 @@ func IcmpListenServer() {
 
 			// set key and var and set pttl
 			rdb.SetEX(ctx, AgentIPLastMsKey+ip, pingResult, time.Duration(ipMap[ip].PTLL)*time.Second)
+
 		}
-
 	}
-
 }
 
 func SubExpiredTLL() {
@@ -73,8 +89,8 @@ func SubExpiredTLL() {
 	for msg := range ch {
 		payload := msg.Payload
 
-		match, _ := regexp.MatchString(AgentIPLastMsKey+`((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`, payload)
-		if match {
+		// check
+		if AgentIPLastMsKeyCompile.MatchString(payload) {
 			s := strings.Split(payload, "_")
 			rdb.SAdd(ctx, AgentErrListKey+AgentName, s[1]).Result()
 			if _, ok := ipMap[s[1]]; ok {
